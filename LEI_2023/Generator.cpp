@@ -18,8 +18,9 @@ namespace Gener
 		EqGreat,
 		Not
 	};
-
-	stack<string> loopstack;
+	stack<string> loopstackIf;
+	stack<string> loopstackWhile;
+	vector<vector<bool>> inIf(1, vector<bool>(3, false));
 	bool CodeGeneration(Lex::LEX& lex, Parm::PARM& parm, Log::LOG& log)
 	{
 		stack<IT::Entry> temp;
@@ -84,13 +85,8 @@ namespace Gener
 
 		string func_name = "";
 
-		bool flag_while = false,
-			flag_do_while = false,
-			flag_main = false,
-			flag_return = false,
-			flag_if_true = false,
-			flag_if_false = false,
-			flag_if = false;
+		bool flag_main = false,
+			flag_return = false;
 
 
 		ofile << "\n.code\n\n";
@@ -156,7 +152,7 @@ namespace Gener
 			}
 			case LEX_BRACELET:
 			{
-				if (!flag_while && !flag_if && !flag_main)
+				if (!inIf.back()[0] && !flag_main)
 				{
 					ofile << "\nreturn" << func_name << ":\n";
 					ofile << "\n\tpop ecx" << endl;
@@ -177,23 +173,24 @@ namespace Gener
 						"\ncall ExitProcess\n";
 					ofile << func_name + " ENDP\n\n\n";
 				}
-				if (flag_while)
+				if (inIf.back()[0] && inIf.back()[1])
 				{
-					flag_while = false;
-					ofile << "\tjmp " << loopstack.top() << "do\n\n";
-					ofile << loopstack.top() << "End:\n";
+					ofile << "\tjmp " << loopstackIf.top() << "do\n\n";
+					ofile << loopstackIf.top() << "End:\n"; 
+					loopstackIf.pop();
+					inIf.back().erase(inIf.back().begin(), inIf.back().end());
+					inIf.pop_back();
 				}
-				if (flag_if_true || flag_if_false)
+				if (inIf.back()[0] && !inIf.back()[1])
 				{
-					flag_if_false = false;
-					flag_if_true = false;
-					ofile << "\n\tjmp " << loopstack.top() << "End\n\n";
+					ofile << "\n\tjmp " << loopstackIf.top() << "End\n\n";
 				}
-				if (LEXEMA(i + 1) != LEX_ISTRUE && LEXEMA(i + 1) != LEX_ISFALSE && flag_if)
+				if (LEXEMA(i + 1) != LEX_ISTRUE && LEXEMA(i + 1) != LEX_ISFALSE && (!inIf.back()[1] && inIf.size() != 1))
 				{
-					flag_if = false;
-					ofile << loopstack.top() << "End:\n";
-					loopstack.pop();
+					ofile << loopstackIf.top() << "End:\n";
+					loopstackIf.pop();
+					inIf.back().erase(inIf.back().begin(), inIf.back().end());
+					inIf.pop_back();
 				}
 				break;
 			}
@@ -392,12 +389,14 @@ namespace Gener
 			}
 			case LEX_WHILE:
 			{
-				if (!flag_do_while)
+				if (!inIf.back()[2])
 				{
-					flag_while = true;
+					inIf.emplace_back();
+					inIf.back().resize(3, true);
+					inIf.back()[2] = false;
 					whileNum++;
-					loopstack.push("while" + to_string(whileNum));
-					ofile << "\n" << loopstack.top() << "do:\n";
+					loopstackIf.push("while" + to_string(whileNum));
+					ofile << "\n" << loopstackIf.top() << "do:\n";
 				}
 				i += 2;
 				if (LEXEMA(i) == LEX_LITERAL)
@@ -424,35 +423,37 @@ namespace Gener
 				}
 				if (LEXEMA(i + 1) != LEX_RIGHTTHESIS)
 				{
-					i = Operation(i + 1, lex, ofile, Semantic::If, loopstack.top());
+					i = Operation(i + 1, lex, ofile, Semantic::If, loopstackIf.top());
 				}
 				ofile << "\tpop eax" << endl;
 				ofile << "\tcmp eax, 0" << endl;
 
-				if (!flag_do_while)
+				if (!inIf.back()[2])
 				{
-					ofile << "\tje " << loopstack.top() << "End" << "\n";
+					ofile << "\tje " << loopstackIf.top() << "End" << "\n";
 				}
 				else
 				{
-					ofile << "\tjne " << loopstack.top() << "do" << "\n";
+					ofile << "\tjne " << loopstackIf.top() << "do" << "\n";
 				}
 				break;
 			}
 			case LEX_DO:
 			{
-				flag_do_while = true;
+				inIf.emplace_back();
+				inIf.back().resize(3, true);
 				whileNum++;
-				loopstack.push("while" + to_string(whileNum));
-				ofile << "\n" << loopstack.top() << "do:\n";
+				loopstackIf.push("while" + to_string(whileNum));
+				ofile << "\n" << loopstackIf.top() << "do:\n";
 				break;
 			}
 			case LEX_IF:
 			{
-				flag_if = true;
+				inIf.emplace_back();
+				inIf.back().resize(3, false);
 				ifNum++;
-				loopstack.push("if" + to_string(ifNum));
-				ofile << "\n" << loopstack.top() << "do:\n";
+				loopstackIf.push("if" + to_string(ifNum));
+				ofile << "\n" << loopstackIf.top() << "do:\n";
 				i += 2;
 				if (LEXEMA(i) == LEX_LITERAL)
 				{
@@ -478,30 +479,30 @@ namespace Gener
 				}
 				if (LEXEMA(i + 1) != LEX_RIGHTTHESIS)
 				{
-					i = Operation(i + 1, lex, ofile, Semantic::If, loopstack.top());
+					i = Operation(i + 1, lex, ofile, Semantic::If, loopstackIf.top());
 				}
 				ofile << "\tpop eax" << endl;
 				ofile << "\tcmp eax, 0" << endl;
 				if (findTrueIf(i + 1, lex))
-					ofile << "\tjne " << loopstack.top() << "true" << endl;
+					ofile << "\tjne " << loopstackIf.top() << "true" << endl;
 				else
-					ofile << "\tjne " << loopstack.top() << "End" << endl;
+					ofile << "\tjne " << loopstackIf.top() << "End" << endl;
 				if (findFalseIf(i + 1, lex))
-					ofile << "\tje " << loopstack.top() << "false" << endl;
+					ofile << "\tje " << loopstackIf.top() << "false" << endl;
 				else
-					ofile << "\tje " << loopstack.top() << "End" << endl;
+					ofile << "\tje " << loopstackIf.top() << "End" << endl;
 				break;
 			}
 			case LEX_ISFALSE:
 			{
-				ofile << loopstack.top() << "false:\n";
-				flag_if_true = true;
+				ofile << loopstackIf.top() << "false:\n";
+				inIf.back()[0] = true;
 				break;
 			}
 			case LEX_ISTRUE:
 			{
-				ofile << loopstack.top() << "true:\n";
-				flag_if_false = true;
+				ofile << loopstackIf.top() << "true:\n";
+				inIf.back()[0] = true;
 				break;
 			}
 			}

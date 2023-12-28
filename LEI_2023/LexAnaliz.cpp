@@ -568,22 +568,28 @@ namespace Lex
 							idtype = nullptr;
 						if (isIf && !isFunc)
 						{
-							int i = scopes.size()-1;
-							for (i; i >= 0; i--)
-							{
-								char temp[STR_MAXSIZE] = "";
-								strncpy_s(temp, scopes[i], ID_MAXSIZE);
-								strncat(temp, curword, ID_MAXSIZE);
-								int index = IT::isId(tables.idtable, temp);
-								if (index != TI_NULLIDX)
-								{
-									strncpy_s(id, scopes[i], ID_MAXSIZE);
-									break;
-								}
-							}
-							if (i == -1)
+							if (tables.lextable.table[tables.lextable.size - 1].lexema == LEX_ID_TYPE)
 							{
 								strncpy_s(id, scopes.back(), ID_MAXSIZE);
+							}
+							else {
+								int i = scopes.size() - 1;
+								for (i; i >= 0; i--)
+								{
+									char temp[STR_MAXSIZE] = "";
+									strncpy_s(temp, scopes[i], ID_MAXSIZE);
+									strncat(temp, curword, ID_MAXSIZE);
+									int index = IT::isId(tables.idtable, temp);
+									if (index != TI_NULLIDX)
+									{
+										strncpy_s(id, scopes[i], ID_MAXSIZE);
+										break;
+									}
+								}
+								if (i == -1)
+								{
+									strncpy_s(id, scopes.back(), ID_MAXSIZE);
+								}
 							}
 						}
 						else if (!isFunc && !scopes.empty())
